@@ -1,4 +1,7 @@
+.DS_Store
 .project
 .pydevproject
 data/old
+test/*
+!test/rand_cdr3_in.csv
 *.pyc

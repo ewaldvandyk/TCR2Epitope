@@ -3,7 +3,7 @@ import io_evd.tsv
 import data_transform.nMer
 
 # User parameters
-cFlag = True # Set cFlag to true to use Renske's c module nMer.vec_2_posterior_c
+cFlag = False # Set cFlag to true to use Renske's c module nMer.vec_2_posterior_c
 
 
 # Setup paths
