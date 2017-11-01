@@ -138,7 +138,7 @@ class AaVecSpace:
         if cdrLen == None:
             raise IOError("Cdr length not specified")
         
-        return [float(i+1)/cdrLen for i in nMerI]
+        return [float(i)/(cdrLen-1) for i in nMerI]
     
     def get_nmer_vec(self, nMer=None, nMerI=None, cdrLen = None):
         nmer_aaVec = self.get_nmer_aaVec(nMer)
