@@ -3,5 +3,5 @@
 .pydevproject
 data/old
 test/*
-!test/rand_cdr3_in.csv
+!test/rand_cdr3_in.tsv
 *.pyc

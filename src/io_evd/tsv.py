@@ -3,7 +3,8 @@ import csv
 import warnings
 
 class Data:
-    
+    defaultDialect = "excel-tab"
+    supported_delimiters = [',', '\t']
     validFileExt = (".TXT", ".CSV", ".TSV")
     validNAs     = ("", "NA", "NAN")
     maxIter = 10e6
@@ -158,7 +159,7 @@ class Data:
         return self._outFile
     
     def set_data(self, dictData, **kwargs):
-        print kwargs.keys()
+#         print kwargs.keys()
         
         if self._iterInLoop:
             raise IOError("Not allowed to change data dictionary while iterating")
@@ -203,14 +204,17 @@ class Data:
         dictData = []
         with open(self._inFile, "rU") as f:
             if not self._firstLine == None:
-                for ignoreLine in range(self._firstLine):
-                    ignoreText = f.readline()
+                for _ in range(self._firstLine):
+                    _ = f.readline()
             if not self._dialect_fixed:
-                self._dialect = csv.Sniffer().sniff(f.read(Data.sniffRange))
+                try:
+                    self._dialect = csv.Sniffer().sniff(f.read(Data.sniffRange), Data.supported_delimiters)
+                except:
+                    self._dialect = Data.defaultDialect 
                 f.seek(0)
                 if not self._firstLine == None:
-                    for ignoreLine in range(self._firstLine):
-                        ignoreText = f.readline()
+                    for _ in range(self._firstLine):
+                        _ = f.readline()
                 
             dictReader = csv.DictReader(f, dialect=self._dialect)
             self._allFields = dictReader.fieldnames

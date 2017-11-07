@@ -1,12 +1,12 @@
 import inspect
 import os
-import itertools
+# import itertools
 import numpy.matlib as matlib
 import numpy as np
 import io_evd.tsv
-import csv
-import math
-import matplotlib.pyplot as plt
+# import csv
+# import math
+# import matplotlib.pyplot as plt
 
 class EpiModel:
     def __init__(self, epiNames=None, epiWeights=None):
@@ -55,7 +55,7 @@ class Model:
         
         return (epiNames, epiPost)
     
-    def get_aa_weights(self, cdrSeq=None, nMerMat=None, gmmModel=None, epiName=None):
+    def get_aa_weights(self, cdrSeq=None, nMerMat=None, postMat= None, gmmModel=None, epiName=None):
         epiI = self._models.epiNames.index(epiName)
 
         pos_matrix = nMerMat[:,-gmmModel.nMerLen:]
@@ -65,10 +65,11 @@ class Model:
         cdrLen = len(uniPos)
         pos_matrix = np.round((cdrLen-1)*pos_matrix)
 #         print pos_matrix
-    
-        postMat = gmmModel.mat_2_nMerPosteriors(nMerMat)
+        if postMat == None:
+            postMat = gmmModel.mat_2_nMerPosteriors(nMerMat)
+        
         (_,numMix) = postMat.shape
-        aaWeights = matlib.zeros(shape=(1,cdrLen))
+        aaWeights = np.zeros(shape=cdrLen)
         for aaI in range(cdrLen):
             aaPost = matlib.zeros(shape=(1,numMix))
             occurI = [aaI in row for row in pos_matrix]
@@ -78,7 +79,7 @@ class Model:
             aaWeight = aaPost * self._models.epiWeights[1:,epiI]
             aaWeight /= gmmModel.nMerLen 
             aaWeight += self._models.epiWeights[0,epiI]/cdrLen
-            aaWeights[0,aaI] = aaWeight
+            aaWeights[aaI] = aaWeight
         
 #             print aaWeight
 #             plt.figure(aaI)

@@ -273,7 +273,7 @@ class Gmm:
         postVec = np.zeros(shape=(1,numBins))
         for i in range(numVecs):
             postVec += postMatrix[i,:]
-        return postVec
+        return (postVec, postMatrix)
     
     def num_mix(self):
         return self._model.numMix
