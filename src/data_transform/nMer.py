@@ -3,6 +3,8 @@ import os
 import itertools
 import numpy.matlib as matlib
 import numpy as np
+import ctypes as ct
+import warnings
 
 class Gmm_model:
     def __init__(self, dim=None, numMix=None):
@@ -10,39 +12,179 @@ class Gmm_model:
             raise IOError("Both dim and numMix must be specified")
         self.dim = dim
         self.numMix = numMix
-        self.mixPriors = matlib.zeros(shape=(1, numMix))
-        self.gaussCoeffs = matlib.zeros(shape=(1, numMix))
-        self.mus = matlib.zeros(shape=(numMix, dim))
-        self.sig_inv = []
-        for _ in range(numMix):
-            self.sig_inv.append(matlib.zeros(shape=(dim,dim)))
-        
+        self.mixPriors = None
+        self.gaussCoeffs = None
+        self.mus = None
+        self.sig_inv = None
+   
     def set_mixPriors(self, mixPriors=None):
-        if len(mixPriors) != self.numMix:
+        if not type(mixPriors).__module__ == "numpy.matrixlib.defmatrix":
+            raise TypeError("mixPriors not of type numpy.matrixlib.defmatrix")
+        (priorFold,numMix) = mixPriors.shape 
+        if numMix != self.numMix:
             raise IndexError("Length of mixPriors doesn't match the number of mixtures") 
-        self.mixPriors[:] = mixPriors
+        if priorFold != 1:
+            raise IndexError("mixPrior cannot contain multiple rows")
+        self.mixPriors = mixPriors
             
     def set_gaussCoeffs(self, gaussCoeffs=None):
-        if len(gaussCoeffs) != self.numMix:
+        if not type(gaussCoeffs).__module__ == "numpy.matrixlib.defmatrix":
+            raise TypeError("gaussCoeffs not of type numpy.matrixlib.defmatrix")
+        (gaussFold,numMix) = gaussCoeffs.shape
+        if numMix != self.numMix:
             raise IndexError("Length of gaussCoeffs doesn't match the number of mixtures") 
-        self.gaussCoeffs[:] = gaussCoeffs
+        if gaussFold != 1:
+            raise IndexError("gaussCoeffs cannot contain multiple rows")
+        self.gaussCoeffs = gaussCoeffs
     
-    def set_mu(self, mixI=None, mu=None):
-        if len(mu) != self.dim:
+    def set_mus(self, mus=None):
+        if not type(mus).__module__ == 'numpy.matrixlib.defmatrix':
+            raise TypeError("Mu matrix not of type numpy.matrixlib.defmatrix")
+        (nMix, dim) = mus.shape
+        if dim != self.dim:
             raise IndexError("Mu vector does not have the proper dimension")
-        if mixI < 0 or mixI >= self.numMix:
-            raise IndexError("mixI out of bound")
-        self.mus[mixI,:] = mu
+        if nMix != self.numMix:
+            raise IndexError("Mu matrix does not have the proper number of mixtures")
+        self.mus = mus
         
-    def set_sig_inv_row(self, mixI=None, rowI=None, sig_inv_row=None):
-        if len(sig_inv_row) != self.dim:
-            raise IndexError("Covariance matrix row does not have the proper dimension")
-        if mixI < 0 or mixI >= self.numMix:
-            raise IndexError("mixI out of bound")
-        if rowI < 0 or rowI >= self.dim:
-            raise IndexError("Row index out of bound")
-        self.sig_inv[mixI][rowI,:] = sig_inv_row
+    def set_sig_inv(self, sig_inv=None):
+        if not isinstance(sig_inv, list):
+            raise TypeError("Gaussian sig_inv matrices not passed in list format")
+        numMix = len(sig_inv)
+        if numMix != self.numMix:
+            raise IndexError("sig_inv does not have the proper number of mixtures")
+        for mI in range(numMix):
+            if not type(sig_inv[mI]).__module__ == "numpy.matrixlib.defmatrix":
+                raise TypeError("sig_inv mixture %d not in numpy.matrixlib.defmatrix format"%(mI))
+            (dimR, dimC) = sig_inv[mI].shape
+            if dimR != self.dim or dimC != self.dim:
+                raise IndexError("sig_inv mixture %d doesn't have the proper dimensions"%(mI))
+        self.sig_inv = sig_inv
+            
+    def vec_2_posterior(self, vec=None):
+        if self.mixPriors == None or self.gaussCoeffs == None or \
+           self.mus == None or self.sig_inv == None:
+            raise IOError("Model parameters not loaded properly")
+        if not type(vec).__module__ == "numpy.matrixlib.defmatrix":
+            raise TypeError("Input vector not of type numpy.matrixlib.defmatrix")
+        
+        numVec, vecLen = vec.shape
+        if numVec != 1:
+            raise IndexError("Only one vector allowed at a time")
+        if vecLen != self.dim:
+            raise IndexError("nMer vector dimension doesn't agree with gmm dimension")
+        gaussP  = matlib.zeros(shape=[1, self.numMix])
+        for bI in range(self.numMix):
+            x = vec - self.mus[bI,:]
+            x_sqr = x*self.sig_inv[bI]*x.transpose()
+            pwr = -0.5*x_sqr
+            gaussP[0,bI] = self.gaussCoeffs[0,bI] * np.exp(pwr)
+        
+        postNorm = 1/(gaussP*self.mixPriors.transpose())
+        
+        postVec = postNorm[0,0]*matlib.multiply(gaussP, self.mixPriors) 
+#         print postVec
+        return postVec
 
+class Gmm_model_c:
+    def __init__(self, dim=None, numMix=None, c_object_file=None):
+        if not isinstance(dim, (int, long)) or not isinstance(numMix, (int, long)):
+            raise IOError("Both dim and numMix must be specified")
+        self.dim = dim
+        self.numMix = numMix
+        
+        self.mixPriorFlag       = False
+        self.gaussCoeffsFlag    = False
+        self.musFlag            = False
+        self.sigInvFlag         = False
+            
+        if c_object_file == None or not os.path.isfile(c_object_file):
+            classFileName = inspect.getfile(self.__class__)
+            classDir = os.path.dirname(classFileName)
+            so_file = os.path.join(classDir, "c_ctypes_posterior.so")
+            self.c_lib=ct.cdll.LoadLibrary(so_file)
+        else:
+            self.c_lib=ct.cdll.LoadLibrary(c_object_file)
+        self.c_lib.init(self.numMix,self.dim)
+        
+    def __del__(self):
+        self.c_lib.clean()
+        
+    def set_mixPriors(self, mixPriors=None):
+        if not type(mixPriors).__module__ == "numpy.matrixlib.defmatrix":
+            raise TypeError("mixPriors not of type numpy.matrixlib.defmatrix")
+        (priorFold,numMix) = mixPriors.shape 
+        if numMix != self.numMix:
+            raise IndexError("Length of mixPriors doesn't match the number of mixtures") 
+        if priorFold != 1:
+            raise IndexError("mixPrior cannot contain multiple rows")
+        cMixPriors = np.ctypeslib.as_ctypes(mixPriors.flatten())
+        self.c_lib.set_mixPriors(cMixPriors)
+        self.mixPriorFlag = True
+        
+    def set_gaussCoeffs(self, gaussCoeffs=None):
+        if not type(gaussCoeffs).__module__ == "numpy.matrixlib.defmatrix":
+            raise TypeError("gaussCoeffs not of type numpy.matrixlib.defmatrix")
+        (gaussFold,numMix) = gaussCoeffs.shape
+        if numMix != self.numMix:
+            raise IndexError("Length of gaussCoeffs doesn't match the number of mixtures") 
+        if gaussFold != 1:
+            raise IndexError("gaussCoeffs cannot contain multiple rows")
+        cGaussCoeffs = np.ctypeslib.as_ctypes(gaussCoeffs.flatten())
+        self.c_lib.set_gaussCoeffs(cGaussCoeffs)
+        self.gaussCoeffsFlag = True
+    
+    def set_mus(self, mus=None):
+        if not type(mus).__module__ == 'numpy.matrixlib.defmatrix':
+            raise TypeError("Mu matrix not of type numpy.matrixlib.defmatrix")
+        (nMix, dim) = mus.shape
+        if dim != self.dim:
+            raise IndexError("Mu matrix does not have the proper dimension")
+        if nMix != self.numMix:
+            raise IndexError("Mu matrix does not have the proper number of mixtures")
+        cMus = np.ctypeslib.as_ctypes(mus.flatten())
+        self.c_lib.set_mus(cMus)
+        self.musFlag = True
+
+    def set_sig_inv(self, sig_inv=None):
+        if not isinstance(sig_inv, list):
+            raise TypeError("Gaussian sig_inv matrices not passed in list format")
+        numMix = len(sig_inv)
+        if numMix != self.numMix:
+            raise IndexError("sig_inv does not have the proper number of mixtures")
+        for mI in range(numMix):
+            if not type(sig_inv[mI]).__module__ == "numpy.matrixlib.defmatrix":
+                raise TypeError("sig_inv mixture %d not in numpy.matrixlib.defmatrix format"%(mI))
+            (dimR, dimC) = sig_inv[mI].shape
+            if dimR != self.dim or dimC != self.dim:
+                raise IndexError("sig_inv mixture %d doesn't have the proper dimensions"%(mI))
+        
+        new_sigInv=sig_inv[0]
+        for mat in sig_inv[1:]:
+            new_sigInv=np.vstack((new_sigInv, mat))
+        cSig_inv = np.ctypeslib.as_ctypes(new_sigInv.flatten())
+        self.c_lib.set_sig_inv(cSig_inv)
+#         print sig_inv[120]
+        self.sigInvFlag = True
+        
+    def vec_2_posterior(self, vec=None):
+        if self.mixPriorFlag == False or \
+        self.gaussCoeffsFlag == False or \
+        self.musFlag  == False or \
+        self.sigInvFlag == False:
+            raise IOError("Model parameters not loaded properly")
+
+        # Convert to np.array because as_ctypes 
+        # has a bug and does not process flattened 
+        # matrix well
+        vec2 = np.array([vec[0,i] for i in range(self.dim)]) 
+        cVec     = np.ctypeslib.as_ctypes(vec2) 
+        postVec = np.zeros(self.numMix)
+        cPostVec  = np.ctypeslib.as_ctypes(postVec)
+        self.c_lib.c_vec_2_posterior(cVec,cPostVec)
+        postMat = matlib.matrix(postVec)
+        return postMat
+        
 class AaVecSpace:
     nMerLenRange = [1, 6]
     nMerSpanRange = [1,8]
@@ -180,18 +322,23 @@ class AaVecSpace:
 
 
 class Gmm:
-    def __init__(self, modelFile = None, cFlag=None):
+    def __init__(self, modelFile = None):
         classFileName = inspect.getfile(self.__class__)
-        classDir = os.path.dirname(classFileName)
+        classDir = os.path.dirname(classFileName) 
         
-        
-        self.set_cFlag(cFlag)
          
         self._dataDir = os.path.abspath(os.path.join(classDir, "..", "..", "data"))
+        self._c_objFile = os.path.join(classDir, "c_ctypes_posterior.so")
+        
         if modelFile == None:
             modelFile = os.path.join(self._dataDir, 'gmm_nMer03_nSpan04_nMix_600.tsv')
         if not os.path.isfile(modelFile):
             raise IOError("GMM model file file not found") 
+        if not os.path.isfile(self._c_objFile):
+            warnings.warn("C-code not compiled properly for GMM. Compiling a .so file will significantly speed up computations.", UserWarning)
+            self.set_cFlag(False)
+        else:
+            self.set_cFlag(True)
         
         self._read_model(modelFile)
 #         print self._model.mus
@@ -207,24 +354,38 @@ class Gmm:
             self.numMix = int(fields[2])
             self.dim = int(fields[3])
             
-            self._model = Gmm_model(dim=self.dim, numMix=self.numMix)
+            priors      = matlib.zeros(shape=(1,self.numMix))
+            gaussCoeffs = matlib.zeros(shape=(1,self.numMix))
+            mus    = matlib.zeros(shape=(self.numMix, self.dim))
+            sig_inv = []
+            for _ in range(self.numMix):
+                sig_inv.append(matlib.zeros(shape=(self.dim,self.dim)))
+            
+            if self.get_cFlag() == True:
+                self._model = Gmm_model_c(dim=self.dim, numMix=self.numMix, c_object_file=self._c_objFile)
+            else:
+                self._model = Gmm_model(dim=self.dim, numMix=self.numMix)
             
             nextRow = f.next().strip().split("\t")
-            priors = [float(i) for i in nextRow]
+            priors[:] = [float(i) for i in nextRow]
             self._model.set_mixPriors(priors)
+            
             nextRow = f.next().strip().split("\t")
-            gaussCoeffs = [float(i) for i in nextRow]
+            gaussCoeffs[:] = [float(i) for i in nextRow]
             self._model.set_gaussCoeffs(gaussCoeffs)
             
             for bI in range(self.numMix):
                 nextRow = f.next().strip().split("\t")
                 mu = [float(i) for i in nextRow]
-                self._model.set_mu(bI, mu)
+                mus[bI,:] = mu
+            self._model.set_mus(mus)
+            
             for bI in range(self.numMix):
                 for dI in range(self.dim):
                     nextRow = f.next().strip().split("\t")
                     sig_inv_row = [float(i) for i in nextRow]
-                    self._model.set_sig_inv_row(bI, dI, sig_inv_row)
+                    sig_inv[bI][dI,:] = sig_inv_row
+            self._model.set_sig_inv(sig_inv)
 
     def set_cFlag(self, cFlag): 
         if not cFlag == True:
@@ -234,25 +395,6 @@ class Gmm:
     def get_cFlag(self):
         return self._cFlag
             
-
-    def vec_2_posterior(self, vec=None):
-        _, vecLen = vec.shape
-        if vecLen != self.dim:
-            raise IndexError("nMer vector dimension doesn't agree with gmm dimension")
-#         postVec = matlib.zeros(shape=[1, self._model.numMix])
-        gaussP  = matlib.zeros(shape=[1, self._model.numMix])
-        for bI in range(self._model.numMix):
-            x = vec - self._model.mus[bI,:]
-            x_sqr = x*self._model.sig_inv[bI]*x.transpose()
-            pwr = -0.5*x_sqr
-            gaussP[0,bI] = self._model.gaussCoeffs[0,bI] * np.exp(pwr)
-        
-        postNorm = 1/(gaussP*self._model.mixPriors.transpose())
-        
-        postVec = postNorm[0,0]*matlib.multiply(gaussP, self._model.mixPriors) 
-#         print postVec
-        return postVec
-
     def vec_2_posterior_c(self, vec=None):
         postVec  = matlib.zeros(shape=[1, self._model.numMix])
         return postVec
@@ -261,10 +403,7 @@ class Gmm:
         numVecs,_ = mat.shape
         postMat = matlib.zeros(shape=(numVecs,self.numMix))
         for i in range(numVecs):
-            if self._cFlag:
-                postMat[i,:] = self.vec_2_posterior_c(mat[i,:])
-            else:
-                postMat[i,:] = self.vec_2_posterior(mat[i,:])        
+                postMat[i,:] = self._model.vec_2_posterior(mat[i,:])        
         return postMat
     
     def mat_2_cdrPosteriors(self, mat = None):

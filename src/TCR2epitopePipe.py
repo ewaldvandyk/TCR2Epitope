@@ -203,7 +203,6 @@ class Model:
             raise IOError("Not all model files specified properly")
         
         self._gmmModel = data_transform.nMer.Gmm(modelFile=self._gmmModelFile)
-        self._gmmModel.set_cFlag(False)
         self._nMerLen = self._gmmModel.nMerLen
         self._nMerSpan = self._gmmModel.nMerSpan
         
