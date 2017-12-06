@@ -11,7 +11,7 @@ test_path = os.path.join(base_path, 'test')
 # Setup input and output file. Output fields are appended as columns to the output file
 # Input must be in comma/tab separated text format. Output format is the same   
 inFile  = os.path.join(test_path, "rand_cdr3_in.tsv")
-outFile = os.path.join(test_path, "rand_cdr3_gmmPost_out.tsv")
+outFile = os.path.join(test_path, "rand_cdr3_out.tsv")
 
 
 # Set input options, i.e. specify the relevant input field names as specified in the header 

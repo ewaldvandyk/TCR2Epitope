@@ -160,10 +160,15 @@ class Gmm_model_c:
             if dimR != self.dim or dimC != self.dim:
                 raise IndexError("sig_inv mixture %d doesn't have the proper dimensions"%(mI))
         
-        new_sigInv=sig_inv[0]
-        for mat in sig_inv[1:]:
-            new_sigInv=np.vstack((new_sigInv, mat))
-        cSig_inv = np.ctypeslib.as_ctypes(new_sigInv.flatten())
+        new_sigInv = np.zeros(shape = self.dim*self.dim*self.numMix)
+        sigStart = 0
+        sigEnd = self.dim*self.dim      
+        for mat in sig_inv:
+            new_sigInv[sigStart:sigEnd] = mat.flatten()
+            sigStart    += self.dim*self.dim
+            sigEnd      += self.dim*self.dim
+        
+        cSig_inv = np.ctypeslib.as_ctypes(new_sigInv)
         self.c_lib.set_sig_inv(cSig_inv)
 #         print sig_inv[120]
         self.sigInvFlag = True

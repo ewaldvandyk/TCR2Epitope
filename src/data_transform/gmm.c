@@ -7,7 +7,7 @@
 
 
 //gsl_vectors and matrices to be filled with the data.
-static int dim, numMix, display;
+static int dim, numMix;
  
 static gsl_vector *g_gaussCoeffs, *g_mixPriors;
 static gsl_matrix *g_mus, *g_sigInv;
@@ -18,9 +18,7 @@ static gsl_vector *x, *x_sqr, *g_vec, *gaussP;
 void c_vec_2_posterior(double *invec, double *outvec)
 {
     //local vars
-    int i,j,bI; //loop variables
-    double *temp_x_sqr;
-    double total_x_sqr = 0;
+    int i,bI; //loop variables
     double pwr, postNorm;    //temporary variable
     
     //copy data from p_vec into gsl vector
@@ -43,26 +41,6 @@ void c_vec_2_posterior(double *invec, double *outvec)
         gsl_blas_dgemv(CblasTrans,1.,&view2.matrix,x,0.,x_sqr); //multiply sigInv submatrix to x
         
         gsl_blas_ddot(x_sqr,x,&pwr); //multiply x_sqr to x, store result in pwr
-        
-        if (bI == 120 && display){
-            temp_x_sqr = (double *)calloc(dim,sizeof(double));
-            for (i=0;i<dim;i++){
-            
-//                 printf("%d: %e\n", i, invec[i]);
-                for (j=0;j<dim;j++){
-                    temp_x_sqr[i] += gsl_matrix_get(&view2.matrix,i,j)*gsl_vector_get(x, j);
-//                     printf("%e, ", gsl_matrix_get(&view2.matrix,i,j));    
-                }   
-//                 printf("\n");
-                
-            }
-            for (i=0;i<dim;i++){
-                total_x_sqr += temp_x_sqr[i]*gsl_vector_get(x, i);
-            }
-//             printf("%e, %e\n", total_x_sqr, pwr);
-            free(temp_x_sqr);
-            display = 0;
-        }
         
         pwr=exp(pwr*-0.5);
         
@@ -94,13 +72,13 @@ void c_vec_2_posterior(double *invec, double *outvec)
 //function that receives the fixed data from python and stores it in gsl vectors and matrices
 void init(int p_numMix,int p_dim)
 {
-   
     //allocate memory for static model vectors
     g_gaussCoeffs=gsl_vector_calloc(p_numMix);
     g_mixPriors=gsl_vector_calloc(p_numMix);
     
     g_mus=gsl_matrix_calloc(p_numMix,p_dim);
     g_sigInv=gsl_matrix_calloc(p_numMix*p_dim,p_dim);
+//     printf("g_sigInv length = %ld\n", (long)(p_dim*p_dim)*p_numMix);
     
     //allocate memory for static non-model vectors
     x=gsl_vector_alloc(p_dim); 
@@ -110,14 +88,12 @@ void init(int p_numMix,int p_dim)
     
     numMix=p_numMix;
     dim=p_dim;
-    display = 1;
-//     printf("\nData blocks created\n");
-    
     return;
 }
 
 void set_mixPriors(double *p_mixPriors){
     int i;
+
     for (i = 0; i < numMix; i++){
         gsl_vector_set(g_mixPriors,i,p_mixPriors[i]);
     }
@@ -126,6 +102,7 @@ void set_mixPriors(double *p_mixPriors){
 
 void set_gaussCoeffs(double *p_gaussCoeffs){
     int i;
+    
     for (i = 0; i < numMix; i++){
         gsl_vector_set(g_gaussCoeffs,i,p_gaussCoeffs[i]);
     }
@@ -134,6 +111,7 @@ void set_gaussCoeffs(double *p_gaussCoeffs){
 
 void set_mus(double *p_mus){
     int i,j;
+    
     for(i=0; i<numMix;i++){
         for(j=0;j<dim;j++){
             gsl_matrix_set(g_mus,i,j,p_mus[j+i*dim]);
@@ -144,6 +122,7 @@ void set_mus(double *p_mus){
 
 void set_sig_inv(double *p_sigInv){
     int i,j;
+    
     for(i=0; i<numMix*dim;i++){
         for(j=0;j<dim;j++){
           gsl_matrix_set(g_sigInv,i,j,p_sigInv[j+i*dim]);             
@@ -155,8 +134,8 @@ void set_sig_inv(double *p_sigInv){
 
 
 //function that should be called to clean up c-allocated memory
-void clean()
-{
+void clean(){
+
     gsl_vector_free(g_gaussCoeffs);
     gsl_vector_free(g_mixPriors);
     
@@ -167,7 +146,5 @@ void clean()
     gsl_vector_free(x_sqr);
     gsl_vector_free(g_vec);
     gsl_vector_free(gaussP);
-    
-//     printf("\nData blocks released\n");
     return;
 }
