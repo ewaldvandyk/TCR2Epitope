@@ -87,6 +87,7 @@ class Gmm_model:
         return postVec
 
 class Gmm_model_c:
+    gmm_obj_file_name = "gmm.so"
     def __init__(self, dim=None, numMix=None, c_object_file=None):
         if not isinstance(dim, (int, long)) or not isinstance(numMix, (int, long)):
             raise IOError("Both dim and numMix must be specified")
@@ -101,7 +102,7 @@ class Gmm_model_c:
         if c_object_file == None or not os.path.isfile(c_object_file):
             classFileName = inspect.getfile(self.__class__)
             classDir = os.path.dirname(classFileName)
-            so_file = os.path.join(classDir, "c_ctypes_posterior.so")
+            so_file = os.path.join(classDir, Gmm_model_c.gmm_obj_file_name)
             self.c_lib=ct.cdll.LoadLibrary(so_file)
         else:
             self.c_lib=ct.cdll.LoadLibrary(c_object_file)
@@ -322,13 +323,14 @@ class AaVecSpace:
 
 
 class Gmm:
+    
     def __init__(self, modelFile = None):
         classFileName = inspect.getfile(self.__class__)
         classDir = os.path.dirname(classFileName) 
         
          
         self._dataDir = os.path.abspath(os.path.join(classDir, "..", "..", "data"))
-        self._c_objFile = os.path.join(classDir, "c_ctypes_posterior.so")
+        self._c_objFile = os.path.join(classDir, Gmm_model_c.gmm_obj_file_name)
         
         if modelFile == None:
             modelFile = os.path.join(self._dataDir, 'gmm_nMer03_nSpan04_nMix_600.tsv')
