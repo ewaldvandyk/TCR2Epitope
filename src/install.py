@@ -38,12 +38,3 @@ proc.wait()
 proc = subprocess.Popen(link_args)
 proc.wait()
 
-
-print gsl_include_path
-
-
-# gcc -c -fPIC c_ctypes_posterior.c
-# gcc -I /usr/gsl/lib -shared c_ctypes_posterior.o  -lgsl -lgslcblas -o c_ctypes_posterior.so
-
-# gcc -c -fPIC -I/Users/ewaldvandyk/bin/gsl/include/ gmm.c -o gmm.o
-# gcc -shared gmm.o /Users/ewaldvandyk/bin/gsl/lib/libgsl.a /Users/ewaldvandyk/bin/gsl/lib/libgslcblas.a -o gmm.so
