@@ -6,6 +6,11 @@ import numpy as np
 import ctypes as ct
 import warnings
 
+class Nmers:
+    def __init(self):
+        self.strList = list()
+        self.posList = list()
+
 class Gmm_model:
     def __init__(self, dim=None, numMix=None):
         if not isinstance(dim, (int, long)) or not isinstance(numMix, (int, long)):
@@ -295,8 +300,8 @@ class AaVecSpace:
         nmer_vec = nmer_aaVec + nmer_aaPos
         return nmer_vec
         
-    def get_cdr_nmer_matrix(self, cdrSeq=None):
-        
+    def get_cdr_nmers(self, cdrSeq=None):
+        nmers = Nmers()
         if not self.is_proper_cdr_seq(cdrSeq):
             raise IOError("CDR sequence not specified correctly.")
         cdrSeqLen = len(cdrSeq)
@@ -317,12 +322,22 @@ class AaVecSpace:
                 nMerPosList.append(nMerPos)
                 nMerStrList.append("".join([cdrSeq[i] for i in nMerPos]))
                 
-        nMerNum = len(nMerStrList)
-#         print nMerNum, self._nMerVecDim
+        nmers.strList = nMerStrList
+        nmers.posList = nMerPosList
+        
+        return nmers
+
+        
+    def get_cdr_nmer_matrix(self, cdrSeq=None):
+        
+        nMers = self.get_cdr_nmers(cdrSeq)
+        
+        cdrSeqLen = len(cdrSeq)
+        nMerNum = len(nMers.strList)
 
         nMerVecMat = matlib.zeros((nMerNum, self._nMerVecDim))
         for nMerI in range(nMerNum):
-            nMerVecMat[nMerI,:] = self.get_nmer_vec(nMerStrList[nMerI], nMerPosList[nMerI], cdrSeqLen)
+            nMerVecMat[nMerI,:] = self.get_nmer_vec(nMers.strList[nMerI], nMers.posList[nMerI], cdrSeqLen)
         
         return nMerVecMat
 
